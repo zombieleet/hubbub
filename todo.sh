@@ -16,12 +16,24 @@
 #   but WITHOUT ANY WARRANTY; without even the implied warranty of
 #   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #   GNU General Public License for more details.
+set -e
 
-source functions.sh
+. funtions.sh
+
 readonly TODO_DIR="${HOME}/.bash_todo/"
 
 init_todo() {
     :
+}
+todoComment() {
+    local __writeto="${1}"
+    # avoid cat :P
+    while read line;do
+	echo "${line}" >> "${__writeto}"
+    done <<EOF 
+;; This file is a btsdsh file 
+;; Do not uncomment any of the content that was not commented by you
+EOF
 }
 
 @return() {
@@ -62,7 +74,7 @@ __readTodoDirectory() {
 	_fileExt="${_fileBaseName##*.}"
 	
 	local _retString=$($command "$argument" "${_fileExt}" "${_fileBaseName}");
-
+	
 	[[ ! -z "${_retString}" ]] && { @return "${_retString}" ;}
 	
     done
@@ -131,7 +143,40 @@ addTodo() {
 	return $?
     }
     
-    > "${TODO_DIR}${_short_name}.btdsh"
+    
+    addTodo::SaveTodo \
+	"${TODO_DIR}${_short_name}" "${date}__flag::date__" "${time}__flag::time__"  "${content}__flag::content__"
+    
+}
+
+addTodo::SaveTodo() {
+    
+    local fileToSaveTo="${1}" #content="${content}" date="${date}" time="${time}"
+    > "${fileToSaveTo}"
+    # don't loop the file
+    shift
+    
+    todoComment "${fileToSaveTo}"
+    
+    for _args ;do
+	
+	case ${_args} in
+	    *__flag::content__* )
+		printf "\n\nCONTENT: ${content/__flag::content__/}\n\n" >> "${fileToSaveTo}"
+	    ;;
+	    *__flag::date__* )
+		printf "\n\nDATE: ${date/__flag::date__/}\n\n" >> "${fileToSaveTo}"
+	    ;;
+	    *__flag::time__* )
+		printf "\n\nTIME: ${time/__flag::time__/}\n\n" >> "${fileToSaveTo}"
+		;;
+	    *)
+		;;
+	esac
+    done
 }
 
 general_IfExists="addTodo::IfExists"
+
+addTodo "eat bacon" "I need to eat bacon to have big teeth like my head" "$(date '+%d:%m:%y')" "$(date '+%H:%m:%S')"
+
