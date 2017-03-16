@@ -81,7 +81,7 @@ function assert() {
 	    local com="${1}"
 	    local expectedStatus="${2}"
 
-	    source ./utils.bash
+	    source ./utils.sh
 
 	    expectedStatus=$(int "${expectedStatus}")
 	    status=$?
