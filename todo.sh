@@ -24,7 +24,7 @@ _isCommand=$(type -t sha256deep);
     exit 1;
 }
 . functions.sh
-. async.bash
+
 readonly TODO_DIR="${HOME}/.bash_todo/"
 declare -a _HOLD_FILE_NAME 
 
@@ -80,6 +80,167 @@ xstat() {
     done
 }
 EOF
+
+addTodo::IfExists() {
+    
+    local checkagainst="${1}"
+
+    {
+	[[ -f "${TODO_DIR}${checkagainst}" ]] 
+	
+    } && {
+	@return "BTDSH_EXIST"
+	return 1;
+    } || {
+	@return "BTDSH_NOEXIST"
+	return 0;
+    }
+     
+}
+
+addTodo() {
+    
+    local todo="$1" _presentDate hashvalue _retString
+    
+    [[ -z "$todo" ]] && {
+	@return "Incomplete requirement for adding todo"
+	return $?
+    }
+
+
+    test ! -d "${TODO_DIR}" && mkdir ${TODO_DIR}
+    
+    _presentDate=$(date "+%B_%d_%Y")
+    
+    hashvalue="$(sha256deep <<<${todo})"
+    
+    hashvalue+="--${_presentDate}"
+    
+    _retString=$(__noRepeat "addTodo::IfExists ${hashvalue}");
+    
+    [[ ${_retString} == "BTDSH_EXIST" ]] && {
+	@die "${todo} already exists, choose a new name"
+	return $?
+    }
+
+    addTodo::SaveTodo \
+	"${TODO_DIR}${hashvalue}" "${todo}"
+    
+}
+
+addTodo::SaveTodo() {
+    # xstat does not work as expected
+    #   that is why i decided not to work with the birth time of the todo file
+    #     instead i decided to use the builtin date command
+    local fileToSaveTo="${1}" todo="${2}"
+    > "${fileToSaveTo}"
+
+    printf "${todo}" >> "${fileToSaveTo}"
+}
+
+
+iterateByDate() {
+    local _typeOfOp="${1}"
+
+    readWhenTodo "${_by}" 1>/dev/null
+    
+    for _kk in "${_HOLD_FILE_NAME[@]}";do
+	
+	_saveRelativePath="${_kk##*/}"
+
+	read ___ < "${TODO_DIR}${_saveRelativePath}"
+
+	[[ "${_typeOfOp}" == "nodelete" ]] && {
+	    
+	    [[ "${_saveRelativePath}" =~ ^_ ]] && {
+		
+		@return "${___} has already been marked completed"
+		continue ;
+		
+	    }
+	    
+	    mv "${_kk}" "${TODO_DIR}_${_kk##*/}"
+	    @return "${___} has been marked as completed"
+	    
+	} || {
+	    [[ "${_typeOfOp}" == "delete" ]] && {
+		rm -f "${_kk}"
+		@return "${___} has been deleted"
+	    }
+	}
+	
+    done
+}
+iterateByTitle() {
+    local _typeOfOp="${1}"
+    readAllTodos 1>/dev/null
+    _byHash=$(sha256deep <<<"${_by,,}")
+    
+    for _kk in "${_HOLD_FILE_NAME[@]}";do
+	_saveRelativePath="${_kk%%-*}"
+	_saveRelativePath="${_kk##*/}"
+	read ___ < "${TODO_DIR}${_saveRelativePath}"
+	{
+	    [[ "${_byHash}" == "${_saveRelativePath%%-*}" ]] || \
+		[[ "_${_byHash}" == "${_saveRelativePath%%-*}" ]]
+	} && {
+	    
+	    isEqual=1
+
+	    [[ "${_typeOfOp}" == "nodelete" ]] && {
+		
+		[[ "${_saveRelativePath}" =~ ^_ ]] && {
+		    
+		    @return "${___} has already been marked completed"
+		    continue ;
+		    
+		}
+
+		mv "${_kk}" "${TODO_DIR}_${_kk##*/}"
+		@return "${___} has been marked as completed"
+		
+	    } || {
+		
+		[[ "${_typeOfOp}" == "delete" ]] && {
+		    rm -f "${_kk}"
+		    @return "${___} has been deleted"
+		}
+		
+	    }
+	}
+	
+    done
+    
+    (( isEqual == 0 )) && {
+	@return "${_by} not found"
+    }
+}
+
+markCompleted() {
+    local _byWhat="${1}" _by="${2}" _saveRelativepath _kk _isEqual=0 _byHash;
+
+    {
+	[[ -z "${_by}" ]] && [[ "${_by}" != "all" ]]
+    } && {
+	@die "searching by \"${_byWhat}\" requires one pattern for marking completed todo"
+	return $?
+    }
+    case ${_byWhat} in
+	'date')
+	    printf "%s\n" "$(iterateByDate "nodelete")"  
+	    ;;
+	'title')
+	    printf "%s\n" "$(iterateByTitle "nodelete")"
+	    ;;
+	*)
+	    @die "invalid command to ${FUNCNAME} supported commands are { title, date }"
+	    return $?;
+	;;
+    esac
+    declare +a _HOLD_FILE_NAME
+    unset ___ _kk
+}
+
 readTodoContent() {
     read _todoContent < "${_files}"
     [[ "${_files##*/}" =~ ^_ ]] && {
@@ -196,74 +357,8 @@ readWhenTodo() {
     unset month date year
     
 }
-deleteTodo() {
-    :
-}
 
-markCompleted() {
-    local _byWhat="${1}" _by="${2}" _saveRelativepath _kk _isEqual=0 _byHash;
 
-    [[ -z "${_by}" ]] && {
-	@die "searching by \"${_byWhat}\" requires one pattern for marking completed todo"
-	return $?
-    }
-    case ${_byWhat} in
-	'date')
-	    
-	    readWhenTodo "${_by}" 1>/dev/null
-
-	    for _kk in "${_HOLD_FILE_NAME[@]}";do
-		
-		_saveRelativePath="${_kk##*/}"
-		
-		read ___ < "${TODO_DIR}${_saveRelativePath}"
-		
-		[[ "${_saveRelativePath}" =~ ^_ ]] && {
-		    @return "${___} has already been marked completed"
-		    continue ;
-		}
-		
-		mv "${_kk}" "${TODO_DIR}_${_kk##*/}"
-		printf "%shas been marked as completed\n" "${___}"
-		
-	    done
-	    ;;
-	'title')
-	    
-	    readAllTodos 1>/dev/null
-	    _byHash=$(sha256deep <<<"${_by,,}")
-
-	    for _kk in "${_HOLD_FILE_NAME[@]}";do
-		_saveRelativePath="${_kk%%-*}"
-		_saveRelativePath="${_kk##*/}"
-		read ___ < "${TODO_DIR}${_saveRelativePath}"
-		{
-		    [[ "${_byHash}" == "${_saveRelativePath%%-*}" ]] || \
-			[[ "_${_byHash}" == "${_saveRelativePath%%-*}" ]]
-		} && {
-		    isEqual=1
-		    [[ ${_saveRelativePath} =~ ^_ ]] && {
-			@return "${___} has already been marked completed"
-			continue ;
-		    }
-		    mv "${_kk}" "${TODO_DIR}_${_kk##*/}"
-		    printf "%s has been marked as completed\n" "${___}"
-		}
-	    done
-	    
-	    (( isEqual == 0 )) && {
-		printf "%s\n" "${_by} not found"
-	    }
-	    
-	;;
-	*)
-	    @die "invalid command to ${FUNCNAME} supported commands are { title, date }"
-	    return $?;
-	;;
-    esac
-    declare +a _HOLD_FILE_NAME
-    unset ___ _kk
-}
 readTodo() {
     local readType="${1}" _files _todoContent _compl;
 
@@ -300,7 +395,7 @@ readTodo() {
 		    return $?
 		    ;;
 		*)
-		    echo ${_retString}
+		    printf "%s" "${_retString}"
 		    ;;
 	    esac
 	    
@@ -324,76 +419,68 @@ readTodo() {
 
 }
 
-
-
-addTodo::IfExists() {
+deleteTodo() {
     
-    local checkagainst="${1}"
-
+    local _byWhat="${1}" _by="${2}"
+    
     {
-	[[ -f "${TODO_DIR}${checkagainst}" ]] 
-	
+	[[ -z "${_by}" ]] && [[ "${_byWhat}" != "all" ]]
     } && {
-	@return "BTDSH_EXIST"
-	return 1;
-    } || {
-	@return "BTDSH_NOEXIST"
-	return 0;
-    }
-     
-}
 
-addTodo() {
-    
-    local todo="$1" _presentDate hashvalue _retString
-    
-    [[ -z "$todo" ]] && {
-	@return "Incomplete requirement for adding todo"
+	@die "searching by \"${_byWhat}\" requires one pattern for deleting todo"
 	return $?
     }
-
-
-    test ! -d "${TODO_DIR}" && mkdir ${TODO_DIR}
     
-    _presentDate=$(date "+%B_%d_%Y")
-    
-    hashvalue="$(sha256deep <<<${todo})"
-    
-    hashvalue+="--${_presentDate}"
-    
-    _retString=$(__noRepeat "addTodo::IfExists ${hashvalue}");
-    
-    [[ ${_retString} == "BTDSH_EXIST" ]] && {
-	@die "${todo} already exists, choose a new name"
-	return $?
-    }
-
-    addTodo::SaveTodo \
-	"${TODO_DIR}${hashvalue}" "${todo}"
-    
+    case ${_byWhat} in
+	'all')
+	    
+	    local _runOrNot="${2}"
+	    case "${_runOrNot}" in
+		'')
+		    @die \
+		     "What you are about to do is dangerous" \
+		     "use dry_run to see what this command does"
+		    return ;
+		    ;;
+		'dry_run')
+		    for _dRun in "${TODO_DIR}"*;do
+			printf "%s\n" "rm -f ${_dRun%%-*}"
+		    done
+		    ;;
+		'rm')
+		    for _dRun in "${TODO_DIR}"*;do
+			printf "Removed\t%s\n" "${_dRun%%-*}"
+			rm "${_dRun}" 2>/dev/null
+		    done
+		    ;;
+	    esac
+	    
+	;;
+	'date')
+	    printf "%s\n" "$(iterateByDate "delete")"
+	;;
+	'title')
+	    printf "%s\n" "$(iterateByTitle "delete")"
+	;;
+	*)
+	    @die "${_byWhat} is an invalid subcommand"
+	    return $?
+	;;
+    esac
 }
 
-addTodo::SaveTodo() {
-    # xstat does not work as expected
-    #   that is why i decided not to work with the birth time of the todo file
-    #     instead i decided to use the builtin date command
-    local fileToSaveTo="${1}" todo="${2}"
-    > "${fileToSaveTo}"
-
-    printf "${todo}" >> "${fileToSaveTo}"
-}
-
-markComplete() {
-    :
-}
 exportTodo() {
     :
 }
-#addTodo "visit tammah beach"
+#addTodo "visit tammah village"
 #readTodo all
 #readTodo when "mar 18 2017"
 #readTodo when "januaryadsf 12 2017"
 #readTodo when "january 12 2017"
-#markCompleted "title" "visit bros"
-#markCompleted "date" "mar 18 2015"
-readTodo notcompleted
+#markCompleted "title" "visit tammah markets"
+#markCompleted "date" "mar 18 2017"
+#readTodo when "mar 18 2017"
+#readTodo completed
+#deleteTodo "title" "visit tammah village"
+#deleteTodo "date" 'mar 18 2017'
+#deleteTodo all 
