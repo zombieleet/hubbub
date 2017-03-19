@@ -11,24 +11,24 @@ hubbub uses ~/.bash_todo/ as a place for saving the todos
 Mandatory arguments to long options are mandatory for short options too.
 
 ```bash
--a, --add-todo, add_todo              add's todo
--r, --read-todo, read_todo`            if no argument is specified it reads all the todo 
+-a, --add-todo, add_todo    add todo
+-r, --read-todo, read_todo  if no argument is specified it reads all the todo 
     [ARGUMENTS]
-       all                 behaves the same way if no argument is specified
-       completed           spits out all todo marked as completed
-       notcompleted        spits out all todo that has not been completed
+	   all                  behaves the same way if no argument is specified
+       completed            spits out all todo marked as completed
+       notcompleted         spits out all todo that has not been completed
        when
             [ARGUMENT]
-                          requires date in this format
-                          [FORMAT]
-                              month:day:year
-                              "month day  year"
-								  month can either be in it's short form or long form day should be a number
+							requires date in this format
+							[FORMAT]
+							month:day:year
+							"month day  year"
+							month can either be in its short form or long form day should be a number
 
 -d, --delete-todo, delete_todo         deletes todo
 	[ARGUMENTS]
-		date               date format is the same format as that of  when in (-r|--read-todo|read_todo)
-		title              deletes a todo by title ( the todos full title )
+		date               			   date format is the same format as that of  when in (-r|--read-todo|read_todo)
+		title               		   deletes a todo by title ( the todos full title )
 
 -m, --mark-completed, mark_completed   marks todo as completed
 	[ARGUMENTS]
@@ -37,7 +37,7 @@ Mandatory arguments to long options are mandatory for short options too.
 
 -e, --export-todo, export_todo          exports the todo
 	[ARGUMENTS]
-		json               exports the todo as json
+		json               				exports the todo as json
 		
 -i, --interative, interactive           goes into interactive mood
 
