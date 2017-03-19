@@ -24,10 +24,10 @@ _isCommand=$(type -t sha256deep);
     exit 1;
 }
 . functions.sh
-. async.bash
 
 readonly TODO_DIR="${HOME}/.bash_todo/"
 declare -a _HOLD_FILE_NAME
+
 license() {
     cat <<'EOF'
 This program is free software; you can redistribute it and/or modify
@@ -42,8 +42,9 @@ GNU General Public License for more details.
 
 EOF
 }
+
 header() {
-    tput reset
+
     cat <<'EOF'
  _           _     _           _     
 | |__  _   _| |__ | |__  _   _| |__  
@@ -58,8 +59,61 @@ header() {
 EOF
     sleep 0.10
 }
+
+usage() {
+    cat <<'EOF'
+Usage: hubbub [OPTIONS] [ARGUMENT_TO_OPTIONS](Most argument are not compulsory)
+Create todo list with the capability of deleting and marking completed
+todo at a specific date
+
+If no option is specified it enters into interactive mood ( which has not been fully implemented )
+
+hubbub uses ~/.bash_todo/ as a place for saving the todos
+Mandatory arguments to long options are mandatory for short options too.
+
+     -a, --add-todo, add_todo              add's todo
+     -r, --read-todo, read_todo            if no argument is specified it reads all the todo 
+                  [ARGUMENTS]
+                       all                 behaves the same way if no argument is specified
+                       completed           spits out all todo marked as completed
+                       notcompleted        spits out all todo that has not been completed
+                       when
+                          [ARGUMENT]
+                                           requires date in this format
+                                           [FORMAT]
+                                              month:day:year
+                                              "month day  year"
+                                           month can either be in it's short form or long form
+                                           day should be a number
+
+    -d, --delete-todo, delete_todo         deletes todo
+                  [ARGUMENTS]
+                        date               date format is the same format as that of  when in (-r|--read-todo|read_todo)
+                        title              deletes a todo by title ( the todos full title )
+
+    -m, --mark-completed, mark_completed   marks todo as completed
+                  [ARGUMENTS]
+                        date               date format is the same format as that of  when in (-r|--read-todo|read_todo)
+                        title              marks a todo as completed if the full title of the todo is passed as an argument to title
+
+   -e, --export-todo, export_todo          exports the todo
+                  [ARGUMENTS]
+                        json               exports the todo as json
+   -i, --interative, interactive           goes into interactive mood
+   -h, --help, help                        shows this usage/help message
+
+  NOTE: Only non short/long option is supported in interactive mood
+        The same arguments are supported in interactive mood
+        When adding a todo in interactive mood do not quote it
+
+
+REPORT BUG: https://github.com/zombieleet/hubbub/issues
+CONTRIBUTE: https://github.com/zombieleet/hubbub
+EOF
+}
+
 init_todo() {
-   
+    tput reset
     header
 
     tput cup 5
@@ -78,8 +132,7 @@ init_todo() {
 	    'add_todo')
 		__todoToAdd="${rest} ${__rest}"
 		addTodo "${__todoToAdd}"
-		setTimeout "init_todo" 1
-		wait 
+		sleep 1 && init_todo
 		;;
 	    'read_todo')
 		header
@@ -93,21 +146,23 @@ init_todo() {
 	    'mark_completed')
 		header
 		markCompleted "${rest}" "${__rest}"
-		setTimeout "init_todo" 1
-		wait 		
+		sleep 1 && init_todo
 		;;
 	    'export_todo')
 		header
 		exportTodo "${rest}"
-		setTimeout "init_todo" 1
-		wait 		
+		sleep 1 && init_todo
 		;;
 	    'clear')
-		setTimeout "init_todo" 1
-		wait 
+		sleep 1 && init_todo
+		;;
+	    'help')
+		header
+		license
+		usage
 		;;
 	    *)
-		echo "Usage"
+		usage
 	esac
 	tput cup ${LINENO}
     done
@@ -718,9 +773,14 @@ case "${SUBCOMMAND}" in
     ;;
     '-i'|'--interactive'|'interactive'|'')
 	init_todo;
-    ;;
+	;;
+    '-h'|'--help'|'help')
+	header
+	license
+	usage
+	;;
     *)
 	header
 	license
-	echo "Usage"
+	usage
 esac
