@@ -24,12 +24,94 @@ _isCommand=$(type -t sha256deep);
     exit 1;
 }
 . functions.sh
+. async.bash
 
 readonly TODO_DIR="${HOME}/.bash_todo/"
-declare -a _HOLD_FILE_NAME 
+declare -a _HOLD_FILE_NAME
+license() {
+    cat <<'EOF'
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
 
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+EOF
+}
+header() {
+    tput reset
+    cat <<'EOF'
+ _           _     _           _     
+| |__  _   _| |__ | |__  _   _| |__  
+| '_ \| | | | '_ \| '_ \| | | | '_ \ 
+| | | | |_| | |_) | |_) | |_| | |_) |
+|_| |_|\__,_|_.__/|_.__/ \__,_|_.__/ 
+
+              COMMAND LINE TODO APPLICATION
+
+
+
+EOF
+    sleep 0.10
+}
 init_todo() {
-    :
+   
+    header
+
+    tput cup 5
+    
+    printf "\n\n\n"
+    
+    readTodo all
+    tput cup ${LINENO}
+    
+    while read -ep": " line rest __rest;do
+
+	tput reset
+	tput cup 5
+	
+	case "${line}" in
+	    'add_todo')
+		__todoToAdd="${rest} ${__rest}"
+		addTodo "${__todoToAdd}"
+		setTimeout "init_todo" 1
+		wait 
+		;;
+	    'read_todo')
+		header
+		readTodo "${rest}" "${__rest}"
+		;;    
+	    'delete_todo')
+		header
+		deleteTodo "${rest}" "${__rest}"
+		tput cup ${LINENO}
+		;;
+	    'mark_completed')
+		header
+		markCompleted "${rest}" "${__rest}"
+		setTimeout "init_todo" 1
+		wait 		
+		;;
+	    'export_todo')
+		header
+		exportTodo "${rest}"
+		setTimeout "init_todo" 1
+		wait 		
+		;;
+	    'clear')
+		setTimeout "init_todo" 1
+		wait 
+		;;
+	    *)
+		echo "Usage"
+	esac
+	tput cup ${LINENO}
+    done
+    
 }
 
 @return() {
@@ -111,7 +193,11 @@ addTodo() {
 
 
     test ! -d "${TODO_DIR}" && mkdir ${TODO_DIR}
-
+    
+    # xstat does not work as expected
+    #   that is why i decided not to work with the birth time of the todo file
+    #     instead i decided to use the builtin date command
+    
     _presentDate=$(date "+%B_%d_%Y")
     
     hashvalue="$(sha256deep <<<${todo})"
@@ -132,9 +218,6 @@ addTodo() {
 
 # save todo
 addTodo::SaveTodo() {
-    # xstat does not work as expected
-    #   that is why i decided not to work with the birth time of the todo file
-    #     instead i decided to use the builtin date command
     local fileToSaveTo="${1}" todo="${2}"
     > "${fileToSaveTo}"
 
@@ -637,5 +720,7 @@ case "${SUBCOMMAND}" in
 	init_todo;
     ;;
     *)
+	header
+	license
 	echo "Usage"
 esac
