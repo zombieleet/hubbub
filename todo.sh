@@ -81,6 +81,7 @@ xstat() {
 }
 EOF
 
+# don't create todo if it already exists
 addTodo::IfExists() {
     
     local checkagainst="${1}"
@@ -98,6 +99,7 @@ addTodo::IfExists() {
      
 }
 
+# add todo
 addTodo() {
     
     local todo="$1" _presentDate hashvalue _retString
@@ -109,11 +111,11 @@ addTodo() {
 
 
     test ! -d "${TODO_DIR}" && mkdir ${TODO_DIR}
-    
+
     _presentDate=$(date "+%B_%d_%Y")
     
     hashvalue="$(sha256deep <<<${todo})"
-    
+    # append the date of creation of todo
     hashvalue+="--${_presentDate}"
     
     _retString=$(__noRepeat "addTodo::IfExists ${hashvalue}");
@@ -128,6 +130,7 @@ addTodo() {
     
 }
 
+# save todo
 addTodo::SaveTodo() {
     # xstat does not work as expected
     #   that is why i decided not to work with the birth time of the todo file
@@ -136,12 +139,15 @@ addTodo::SaveTodo() {
     > "${fileToSaveTo}"
 
     printf "${todo}" >> "${fileToSaveTo}"
+    printf "%s addedd\n" "${todo}"
 }
 
-
+# iterate todo and grab them by date
+#  this was done to prevent repititon
 iterateByDate() {
-    local _typeOfOp="${1}"
-
+    
+    local _typeOfOp="${1}" _isFound;
+    
     readWhenTodo "${_by}" 1>/dev/null
     
     for _kk in "${_HOLD_FILE_NAME[@]}";do
@@ -153,10 +159,8 @@ iterateByDate() {
 	[[ "${_typeOfOp}" == "nodelete" ]] && {
 	    
 	    [[ "${_saveRelativePath}" =~ ^_ ]] && {
-		
 		@return "${___} has already been marked completed"
 		continue ;
-		
 	    }
 	    
 	    mv "${_kk}" "${TODO_DIR}_${_kk##*/}"
@@ -164,13 +168,25 @@ iterateByDate() {
 	    
 	} || {
 	    [[ "${_typeOfOp}" == "delete" ]] && {
-		rm -f "${_kk}"
-		@return "${___} has been deleted"
+		
+		if [[ -f "${_kk}" ]];then
+		    _isFound=1;
+		    rm -f "${_kk}"
+		    @return "${___} has been deleted"		    
+		fi
+
 	    }
 	}
 	
     done
+    {
+	(( _isFound == 0 )) && [[ "${_typeOfOp}" == "delete" ]]
+    } && {
+	@return "Nothing was deleted is either todo is empty or date format is wrong"
+    }
 }
+# iterate todo and grab them by title
+#  this was done to prevent repititon
 iterateByTitle() {
     local _typeOfOp="${1}"
     readAllTodos 1>/dev/null
@@ -195,7 +211,7 @@ iterateByTitle() {
 		    continue ;
 		    
 		}
-
+		
 		mv "${_kk}" "${TODO_DIR}_${_kk##*/}"
 		@return "${___} has been marked as completed"
 		
@@ -216,33 +232,46 @@ iterateByTitle() {
     }
 }
 
+# mark a todo as completed
 markCompleted() {
-    local _byWhat="${1}" _by="${2}" _saveRelativepath _kk _isEqual=0 _byHash;
-
+    local _byWhat="${1}" _by="${2}" _saveRelativepath _kk _isEqual=0 _byHash _length;
+    
     {
-	[[ -z "${_by}" ]] && [[ "${_by}" != "all" ]]
+	(( _length < 2 )) && [[ -z "${_byWhat}" ]]
+	    
     } && {
-	@die "searching by \"${_byWhat}\" requires one pattern for marking completed todo"
+	@die "insufficent argument passed"
 	return $?
     }
+
     case ${_byWhat} in
 	'date')
+	    [[ -z "${_by}" ]] && {
+		@die "specifiy a date to search for"
+		return $?;
+	    }	    
 	    printf "%s\n" "$(iterateByDate "nodelete")"  
 	    ;;
 	'title')
+	    [[ -z "${_by}" ]] && {
+		@die "specifiy a title to search for"
+		return $?;
+	    }
 	    printf "%s\n" "$(iterateByTitle "nodelete")"
 	    ;;
 	*)
-	    @die "invalid command to ${FUNCNAME} supported commands are { title, date }"
+	    @die "invalid command supported commands are { title, date }"
 	    return $?;
 	;;
     esac
     declare +a _HOLD_FILE_NAME
     unset ___ _kk
 }
-
+# read the content of todo
 readTodoContent() {
     read _todoContent < "${_files}"
+
+    # if a todo starts with _ it is completed
     [[ "${_files##*/}" =~ ^_ ]] && {
 	printf "%d.\t[completed]\t%s\n" "${num}" "${_todoContent}"
 
@@ -250,7 +279,7 @@ readTodoContent() {
 	printf "%d.\t[         ]\t%s\n" "${num}" "${_todoContent}"
     }
 }
-
+# read all todos 
 readAllTodos() {
     declare -i num=0;
     _HOLD_FILE_NAME=()
@@ -268,6 +297,7 @@ readAllTodos() {
 	}
     done
 }
+# read todo by creation date
 readWhenTodo() {
     
     local _date="${1}" _specifiedDate isEqual=0 _joinedDate _files _fileData _monthLength;
@@ -292,7 +322,7 @@ readWhenTodo() {
 	return 1;
     }
 
-    read -a _specifiedDate <<<"${_date}"
+    read -a _specifiedDate <<<"${_date//:/ }"
 
     destructure ${_specifiedDate[@]} "month,date,year"
     
@@ -310,6 +340,7 @@ readWhenTodo() {
 	
     done
 
+    # check if date format specified is supported by this script
     {
 	(( isEqual == 0 )) || \
 	    [[ ! "${year}" =~  ^[[:digit:]]{4}$ ]] || \
@@ -330,7 +361,11 @@ readWhenTodo() {
 	# did this here to avoid repition
 	_monthLength="${#month}"
 	_fileDate="${_fileDate//_/:}"
+	
 	{
+	    # month length is less equal to 3
+	    #  this was done incase the user of this script specified a short form name
+	    #  NOTE:- June and July short form is the same as their long form
 	    (( _monthLength == 3 ))
 	} && {
 	    _shortName="${_fileDateMonth:(-${#_fileDateMonth}):3}"
@@ -358,14 +393,21 @@ readWhenTodo() {
     
 }
 
-
+# read todo by
+#  1. completed
+#  2. when
+#  3. notcompleted
+#  4. all | null
 readTodo() {
     local readType="${1}" _files _todoContent _compl;
 
-    [[ ! -d "${TODO_DIR}" ]] && {
+    {
+	[[ ! -d "${TODO_DIR}" ]] || [[ -z "$(ls ${TODO_DIR})" ]]
+    } && {
 	@die "no todo exits"
 	return $?;
     }
+    
     
     case $readType in
 	'completed')
@@ -395,7 +437,7 @@ readTodo() {
 		    return $?
 		    ;;
 		*)
-		    printf "%s" "${_retString}"
+		    printf "%s\n" "${_retString}"
 		    ;;
 	    esac
 	    
@@ -414,20 +456,25 @@ readTodo() {
 	'all'|'')
 	    local _retString=$(__noRepeat "readAllTodos");
 	    printf "%s\n" "${_retString}"
-	;;
+	    ;;
+	*)
+	    @die "type $readType is not valid, only { completed, all, notcompleted, when } is supported"
+	    return $?
     esac
 
 }
 
+
+# delete a todo
 deleteTodo() {
     
-    local _byWhat="${1}" _by="${2}"
+    local _byWhat="${1}" _by="${2}" _length="${#@}"
     
     {
-	[[ -z "${_by}" ]] && [[ "${_byWhat}" != "all" ]]
+	(( _length < 2 )) && [[ -z "${_byWhat}" ]]
+	    
     } && {
-
-	@die "searching by \"${_byWhat}\" requires one pattern for deleting todo"
+	@die "insufficent argument passed"
 	return $?
     }
     
@@ -457,22 +504,102 @@ deleteTodo() {
 	    
 	;;
 	'date')
+	    [[ -z "${_by}" ]] && {
+		@die "specifiy a date to search for"
+		return $?;
+	    }	    
 	    printf "%s\n" "$(iterateByDate "delete")"
 	;;
 	'title')
+	    [[ -z "${_by}" ]] && {
+		@die "specifiy a title to search for"
+		return $?;
+	    }
 	    printf "%s\n" "$(iterateByTitle "delete")"
 	;;
 	*)
-	    @die "${_byWhat} is an invalid subcommand"
-	    return $?
+	    @die "invalid command supported commands are { title, date }"
+	    return $?;
 	;;
     esac
 }
 
+# export todo as json
 exportTodo() {
-    :
+    local _exportAs="${1}" _todos;
+    case ${_exportAs} in
+	'json')
+	    
+	    local _json="{\n"
+	    
+	    for _todos in "${TODO_DIR}"*;do
+		
+		# this variable will contain the pathname of the todo excluding the date
+		_todoPath="${_todos%%-*}" 
+		
+		# this variable will contain only the date
+		_dateOfCreation="${_todos##*-}"
+		
+		# this varialbe will contain the todos name
+		_todoName="${_todoPath##*/}" 
+		
+		# strip of any _ in the hash value
+		_todoName="${_todoName##*_}"
+		
+		# just get 8 characters from the todo since
+		#     a little change in a plain text will lead to a big change in the hash valueW
+		_json+="\"${_todoName:(-${#_todoName}):8}\":["
+
+		
+		read _todoContent < "${_todos}"
+		
+		[[ "${_todoPath##*/}" =~ ^_ ]] && {
+		    
+		    _json+="\
+{\n\
+\t\"completed\":true,\n\
+\t\"content\":\"${_todoContent}\",\n\
+\t\"dateOfCreation\":\"${_dateOfCreation//_/:}\
+\"\n\
+\t}],\n"
+		    		    
+		} || {
+		    
+		    _json+="\
+{\n\
+\t\"completed\":false,\n\
+\t\"content\":\"${_todoContent}\",\n\
+\t\"dateOfCreation\":\"${_dateOfCreation//_/:}\
+\"\n\
+\t}],\n"
+		    
+		}
+		
+	    done
+	    
+	    <<'EOF'
+{
+   "hash": [{
+         "completed": true,
+         }],
 }
-#addTodo "visit tammah village"
+
+if hash is the last property of the JSON object the leading "," after the "]" is striped off
+
+EOF
+	    _json="${_json%,*}"
+	    
+	    _json+="\n}"
+
+	    printf "${_json}\n" > .btdsh.json
+	    
+	;;
+	*)
+	    @die "${_exportAs} is not supported"
+	    return $?
+    esac
+}
+#addTodo "write download manager with Tcl"
 #readTodo all
 #readTodo when "mar 18 2017"
 #readTodo when "januaryadsf 12 2017"
@@ -484,3 +611,31 @@ exportTodo() {
 #deleteTodo "title" "visit tammah village"
 #deleteTodo "date" 'mar 18 2017'
 #deleteTodo all 
+#exportTodo "json"
+
+
+# getopts did not do what i want
+SUBCOMMAND="${1}"
+shift 
+case "${SUBCOMMAND}" in
+    '-a'|'--add-todo'|'add_todo')
+	addTodo "${@}"
+    ;;
+    '-r'|'--read-todo'|'read_todo')
+	readTodo "${@}"
+    ;;    
+    '-d'|'--delete-todo'|'delete_todo')
+	deleteTodo "${@}"
+    ;;
+    '-m'|'--mark-completed'|'mark_completed')
+	markCompleted "${@}"
+    ;;
+    '-e'|'--export-todo'|'export_todo')
+	exportTodo "${@}"
+    ;;
+    '-i'|'--interactive'|'interactive'|'')
+	init_todo;
+    ;;
+    *)
+	echo "Usage"
+esac
